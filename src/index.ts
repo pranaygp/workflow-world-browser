@@ -1,5 +1,5 @@
 import type { World } from '@workflow/world';
-import { SPEC_VERSION_CURRENT } from '@workflow/world';
+import { mintedSpecVersion } from '@workflow/world';
 import { createBus } from './bus.ts';
 import { openDatabase, STORES, transact } from './idb.ts';
 import { createQueue } from './queue.ts';
@@ -45,15 +45,19 @@ export type BrowserWorld = World & {
  * - Streams: IndexedDB rows, tailed through BroadcastChannel hints.
  */
 export async function createWorld(options: BrowserWorldOptions = {}): Promise<BrowserWorld> {
-  const name = options.name ?? globalThis.process?.env?.WORKFLOW_BROWSER_DB_NAME ?? 'workflow-world';
+  const env = globalThis.process?.env ?? {};
+  const name = options.name ?? env.WORKFLOW_BROWSER_DB_NAME ?? 'workflow-world';
+  // `mintedSpecVersion()` defaults its argument to `process.env`, which throws
+  // in a tab that has no `process`, so pass the environment explicitly.
+  const specVersion = mintedSpecVersion(env);
   const db = await openDatabase(name, options.indexedDB ?? (await defaultIndexedDB()));
   const bus = createBus(`world-browser:${name}`);
   const queue = createQueue(db, bus, name, options.concurrency);
-  const storage = createStorage(db, (runId) => bus.emit({ type: 'event', runId }));
+  const storage = createStorage(db, specVersion, (runId) => bus.emit({ type: 'event', runId }));
   const streamer = createStreamer(db, bus);
 
   return {
-    specVersion: SPEC_VERSION_CURRENT,
+    specVersion,
     ...storage,
     ...streamer,
     getDeploymentId: queue.getDeploymentId,

@@ -1,7 +1,7 @@
-import { eventIdToSlot, type ValidQueueName } from '@workflow/world';
+import { eventIdToSlot, mintedSpecVersion, SPEC_VERSION_SUPPORTS_SLOT_IDENTITY, type ValidQueueName } from '@workflow/world';
 import { IDBFactory } from 'fake-indexeddb';
 import 'fake-indexeddb/auto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type BrowserWorld, createWorld } from '../src/index.ts';
 
 const worlds: BrowserWorld[] = [];
@@ -27,6 +27,33 @@ async function until<T>(fn: () => Promise<T | undefined>, timeoutMs = 10_000): P
 }
 
 const input = new Uint8Array([1, 2, 3]);
+
+describe('spec version', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('declares what the SDK mints, and follows WORKFLOW_SEALED_LOG', async () => {
+    expect((await open(new IDBFactory())).specVersion).toBe(mintedSpecVersion({}));
+    vi.stubEnv('WORKFLOW_SEALED_LOG', '0');
+    const world = await open(new IDBFactory());
+    expect(world.specVersion).toBe(SPEC_VERSION_SUPPORTS_SLOT_IDENTITY);
+    const runId = 'wrun_01TESTSPEC';
+    const created: any = await world.events.create(runId, {
+      eventType: 'run_created',
+      eventData: { deploymentId: 'browser', workflowName: 'w', input },
+    } as never);
+    expect(created.run.specVersion).toBe(SPEC_VERSION_SUPPORTS_SLOT_IDENTITY);
+  });
+
+  it('creates a World where there is no process, as in a browser tab', async () => {
+    vi.stubGlobal('process', undefined);
+    try {
+      const world = await open(new IDBFactory());
+      expect(world.specVersion).toBe(mintedSpecVersion({}));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe('storage', () => {
   it('allocates dense slots and reports what a stale writer missed', async () => {
@@ -69,6 +96,24 @@ describe('storage', () => {
     await expect(
       world.events.create(runId, { eventType: 'step_created', correlationId: 'step_x', eventData: { stepName: 's', input } } as never)
     ).rejects.toThrow(/terminal/);
+  });
+
+  it('filters runs by one status or a list of them', async () => {
+    const world = await open(new IDBFactory());
+    for (const runId of ['wrun_01S1', 'wrun_01S2', 'wrun_01S3']) {
+      await world.events.create(runId, {
+        eventType: 'run_created',
+        eventData: { deploymentId: 'browser', workflowName: 'w', input },
+      } as never);
+    }
+    await world.events.create('wrun_01S2', { eventType: 'run_started' } as never);
+    await world.events.create('wrun_01S3', { eventType: 'run_cancelled' } as never);
+    const ids = async (status: unknown) =>
+      (await world.runs.list({ status } as never)).data.map((r) => r.runId).sort();
+    expect(await ids('pending')).toEqual(['wrun_01S1']);
+    expect(await ids(['running', 'cancelled'])).toEqual(['wrun_01S2', 'wrun_01S3']);
+    expect(await ids([])).toEqual([]);
+    expect(await ids(undefined)).toEqual(['wrun_01S1', 'wrun_01S2', 'wrun_01S3']);
   });
 
   it('claims hook tokens across runs', async () => {

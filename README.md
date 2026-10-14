@@ -74,11 +74,12 @@ on `http://localhost:$PORT`, or `WORKFLOW_BROWSER_BASE_URL`), the same way
 
 `pnpm test` builds the package and runs the Workflow SDK's World compatibility
 suite, [`@workflow/world-testing`](https://github.com/vercel/workflow/tree/main/packages/world-testing)
-(pinned to `5.0.0-beta.57`), against `dist/`, plus unit tests for slot
-allocation, hook tokens, and queue durability. All 14 compatibility tests pass.
+(pinned to `5.0.5`), against `dist/`, plus unit tests for slot
+allocation, hook tokens, and queue durability. All 14 compatibility tests pass; the 2 in-band fence tests are skipped because the World does not advertise that capability.
 
-Tested with `@workflow/world@5.0.0-beta.39` and `@workflow/core@5.0.0-beta.57`
-on Node.js 22. Not tested against Workflow 4.x.
+Tested with `@workflow/world@5.0.4` and `@workflow/core@5.2.2` (`workflow@5.2.2`)
+on Node.js 22. The World declares `mintedSpecVersion()`: spec version 8 by
+default, 6 with `WORKFLOW_SEALED_LOG=0`. Not tested against Workflow 4.x.
 
 Not implemented: encryption (`getEncryptionKeyForRun`), hook retention, the
 `invoke` capability, `createBatch`, and `runs.waitForTerminalStatus`. The

@@ -27,14 +27,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@workflow/errors": "5.0.0-beta.24",
-    "@workflow/world": "5.0.0-beta.39",
+    "@workflow/errors": "5.0.4",
+    "@workflow/world": "5.0.4",
     "fake-indexeddb": "^6.0.0",
     "ulid": "^3.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@workflow/world-testing": "5.0.0-beta.57",
+    "@workflow/world-testing": "5.0.5",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }

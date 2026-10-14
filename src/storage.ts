@@ -10,7 +10,6 @@ import type { Event, Storage } from '@workflow/world';
 import {
   eventIdToSlot,
   getMaxEventsPerRun,
-  SPEC_VERSION_CURRENT,
   slotToEventId,
   stripEventDataRefs,
 } from '@workflow/world';
@@ -29,6 +28,15 @@ const CHILD_CREATION = new Set(['step_created', 'hook_created', 'wait_created'])
  * tab has no `process`: fall back to the World contract's default there.
  */
 const maxEventsPerRun = () => (typeof process === 'undefined' ? 25_000 : getMaxEventsPerRun());
+
+/**
+ * `status` is one status or a list of them. An empty list matches nothing,
+ * like SQL `IN ()`, which is not the same as leaving the filter out.
+ */
+function matchesStatus(status: string, filter?: string | string[]) {
+  if (filter === undefined) return true;
+  return Array.isArray(filter) ? filter.includes(status) : status === filter;
+}
 
 function page<T>(items: T[], limit = 100, cursor?: string | null) {
   const start = cursor ? Number(cursor) : 0;
@@ -84,7 +92,11 @@ function projectEvent(event: Event, resolveData?: string): Event {
  * terminal-state rules, hook token claims, lazy step starts) follow
  * `@workflow/world-local`, the reference implementation.
  */
-export function createStorage(db: IDBDatabase, onEvent: (runId: string) => void): Storage {
+export function createStorage(
+  db: IDBDatabase,
+  worldSpecVersion: number,
+  onEvent: (runId: string) => void
+): Storage {
   async function runEvents(runId: string): Promise<Row[]> {
     const tx = db.transaction(STORES.events, 'readonly');
     const range = IDBKeyRange.bound([runId, 0], [runId, Number.MAX_SAFE_INTEGER]);
@@ -128,7 +140,7 @@ export function createStorage(db: IDBDatabase, onEvent: (runId: string) => void)
         let runs = rows.filter(
           (r) =>
             (!params.workflowName || r.workflowName === params.workflowName) &&
-            (!params.status || r.status === params.status) &&
+            matchesStatus(r.status, params.status) &&
             (!params.deploymentId || r.deploymentId === params.deploymentId)
         );
         runs.sort((a, b) => (a.runId < b.runId ? -1 : 1));
@@ -193,7 +205,7 @@ export function createStorage(db: IDBDatabase, onEvent: (runId: string) => void)
           db,
           [STORES.runs, STORES.events, STORES.steps, STORES.hooks, STORES.waits],
           'readwrite',
-          (tx) => applyEvent(tx, id, data, params)
+          (tx) => applyEvent(tx, id, data, params, worldSpecVersion)
         );
         onEvent(id);
         // Reads that the runtime asks to ride along with a write.
@@ -239,7 +251,7 @@ export function createStorage(db: IDBDatabase, onEvent: (runId: string) => void)
 }
 
 /** The one place the log's semantics live: validate, materialize, append. */
-async function applyEvent(tx: IDBTransaction, runId: string, data: Row, params: Row) {
+async function applyEvent(tx: IDBTransaction, runId: string, data: Row, params: Row, worldSpecVersion: number) {
   const runs = tx.objectStore(STORES.runs);
   const events = tx.objectStore(STORES.events);
   const steps = tx.objectStore(STORES.steps);
@@ -247,7 +259,7 @@ async function applyEvent(tx: IDBTransaction, runId: string, data: Row, params: 
   const waits = tx.objectStore(STORES.waits);
   const now = new Date();
   const eventData: Row = data.eventData ?? {};
-  const specVersion = data.specVersion ?? SPEC_VERSION_CURRENT;
+  const specVersion = data.specVersion ?? worldSpecVersion;
   const type: string = data.eventType;
 
   let run: Row | undefined = await req(runs.get(runId));

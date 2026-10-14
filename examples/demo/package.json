@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@workflow/world": "5.0.0-beta.39",
+    "@workflow/world": "5.0.4",
     "ulid": "^3.0.1",
     "workflow-world-browser": "workspace:*"
   },

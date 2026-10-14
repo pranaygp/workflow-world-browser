@@ -3,7 +3,10 @@ import { monotonicFactory } from 'ulid';
 import type { Bus } from './bus.ts';
 import { req, STORES, transact } from './idb.ts';
 
-const ulid = monotonicFactory();
+// Held on globalThis so every copy of this module in a bundled host shares
+// one monotonic factory, like the per-database realms below.
+const ULID_KEY = Symbol.for('workflow-world-browser.ulid');
+const ulid: () => string = ((globalThis as { [ULID_KEY]?: () => string })[ULID_KEY] ??= monotonicFactory());
 
 interface QueuedMessage {
   messageId: MessageId;
